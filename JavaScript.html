@@ -1,0 +1,533 @@
+<script>
+  let rawData = [];
+  let currentTab = 'home';
+  const TRIP_STORAGE_KEY = 'ridecount_active_trip';
+  let activeTripData = null;
+  let detailPanelActive = false;
+  let tripWarningAcknowledged = false;
+
+  window.onload = function() {
+    switchTab('home');
+    loadAllSheetData(true, true);
+  };
+
+  function switchTab(tabId) {
+    if (detailPanelActive) closeDetailPanel();
+    currentTab = tabId;
+
+    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+    const activeTabEl = document.querySelector(`.nav-tab[onclick="switchTab('${tabId}')"]`);
+    if (activeTabEl) activeTabEl.classList.add('active');
+
+    document.querySelectorAll('.tab-screen').forEach(screen => screen.classList.remove('active'));
+    document.getElementById(`${tabId}-screen`).classList.add('active');
+
+    document.getElementById('top-title-container').style.display = (tabId === 'home') ? 'block' : 'none';
+
+    if (tabId === 'home') populateHomeScreen();
+    if (tabId === 'log') { handleTripStateCheck(); populateParksDropdown(); }
+    if (tabId === 'attractions') populateAttractionsScreen();
+    if (tabId === 'parks') populateParksScreen();
+    if (tabId === 'stats') populateStatsScreen();
+  }
+
+  function openDetailPanel(title, contentHtml) {
+    document.getElementById('detail-panel-title').innerText = title;
+    document.getElementById('detail-panel-content').innerHTML = contentHtml;
+    document.getElementById('detail-panel').classList.add('active');
+    detailPanelActive = true;
+  }
+
+  function closeDetailPanel() {
+    document.getElementById('detail-panel').classList.remove('active');
+    detailPanelActive = false;
+  }
+
+  function loadAllSheetData(firstLoad = false, showLoader = false) {
+    if (showLoader) showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(response) {
+        rawData = response || [];
+        if (currentTab === 'home') populateHomeScreen();
+        if (currentTab === 'log') populateParksDropdown();
+        if (currentTab === 'attractions') populateAttractionsScreen();
+        if (currentTab === 'parks') populateParksScreen();
+        if (currentTab === 'stats') populateStatsScreen();
+        if (firstLoad) handleTripStateCheck();
+        if (showLoader) showLoading(false);
+      })
+      .withFailureHandler(function(err) {
+        alert("Error loading data: " + err);
+        if (showLoader) showLoading(false);
+      })
+      .getData();
+  }
+
+  function showLoading(show) {
+    document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+  }
+
+  function showToast(message) {
+    document.getElementById('toast-message').innerText = message;
+    const toastContainer = document.getElementById('toast-container');
+    toastContainer.style.display = 'block';
+    setTimeout(() => { toastContainer.style.display = 'none'; }, 3000);
+  }
+
+  // --- HOME TAB LOGIC ---
+  function populateHomeScreen() {
+    let totalRides = 0;
+    const parks = new Set();
+    const attractions = new Set();
+    const attrCounts = {};
+
+    rawData.forEach(r => {
+      totalRides += r.count;
+      parks.add(r.park);
+      attractions.add(r.attraction);
+      const key = `${r.park}|${r.attraction}`;
+      attrCounts[key] = (attrCounts[key] || 0) + r.count;
+    });
+
+    // Handle Top 5 layout logic correctly
+    const isSingleStat = rawData.length === 0;
+
+    // Full Card from screenshot: "57 TOTAL RIDES" on top row, Parks & Attractions below
+    let statsHtml = `
+      <div class="ride-card" style="text-align: center; padding: 24px 16px; margin-bottom: 12px;">
+        <div class="stat-number" style="font-size: 42px;">${totalRides}</div>
+        <div class="stat-label">TOTAL RIDES</div>
+      </div>
+      <div style="display:flex; gap:12px; margin-bottom:20px;">
+        <div class="ride-card" style="flex:1; text-align: center; margin-bottom:0; padding: 16px;">
+          <div class="stat-number" style="font-size: 28px;">${parks.size}</div>
+          <div class="stat-label">PARKS</div>
+        </div>
+        <div class="ride-card" style="flex:1; text-align: center; margin-bottom:0; padding: 16px;">
+          <div class="stat-number" style="font-size: 28px;">${attractions.size}</div>
+          <div class="stat-label">ATTRACTIONS</div>
+        </div>
+      </div>
+    `;
+    
+    document.getElementById('stats-cards-container').innerHTML = statsHtml;
+
+    // Most recent logic
+    const mostRecent = rawData.length > 0 ? rawData[0] : null;
+    const recentContainer = document.getElementById('home-most-recent-container');
+    if (!mostRecent) {
+      recentContainer.innerHTML = `<div class="gray-info">No recent logs found. Start a trip!</div>`;
+    } else {
+      // Reformat the JS Date object visually closer to the prompt image
+      const d = new Date(mostRecent.parsedDate);
+      const dateString = d.toDateString() + " 00:00:00 GMT+0000";
+      recentContainer.innerHTML = `
+        <div class="ride-card flex-between" style="align-items:center;">
+          <div>
+            <h3>${mostRecent.attraction}</h3>
+            <p class="gray-info" style="margin-bottom:0; color: #121212;">${mostRecent.park}</p>
+            <p class="gray-info" style="margin-bottom:0;">${dateString}</p>
+          </div>
+          <div class="blue-badge">+${mostRecent.count}</div>
+        </div>
+      `;
+    }
+
+    const top5Data = Object.entries(attrCounts)
+      .map(([key, count]) => {
+        const [park, attraction] = key.split('|');
+        return { park, attraction, totalCount: count };
+      })
+      .sort((a, b) => b.totalCount - a.totalCount)
+      .slice(0, 5);
+
+    const top5Container = document.getElementById('home-top-5-container');
+    if (top5Data.length === 0) {
+      top5Container.innerHTML = `<div class="gray-info">No ride data available. Log a ride!</div>`;
+    } else {
+      top5Container.innerHTML = `<div class="ride-card" style="padding: 0 16px;">` + top5Data.map((item, index) => `
+        <div class="list-item">
+          <div class="list-item-main-info">
+            <span class="list-item-rank">${index + 1}.</span>
+            <div class="list-item-text">
+              <span class="list-item-title">${item.attraction}</span>
+              <span class="list-item-gray" style="color: #121212;">${item.park}</span>
+            </div>
+          </div>
+          <div class="blue-badge">${item.totalCount}</div>
+        </div>
+      `).join('') + `</div>`;
+    }
+  }
+
+  // --- TRIP/LOG LOGIC ---
+  function getTodayDateStringForInput() {
+    const today = new Date();
+    return today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  }
+
+  function formatInputDateToSheet(inputDateStr) {
+    const parts = inputDateStr.split('-');
+    if(parts.length !== 3) return inputDateStr;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  
+  function getTodayString() {
+    const today = new Date();
+    return String(today.getDate()).padStart(2, '0') + '/' + 
+           String(today.getMonth() + 1).padStart(2, '0') + '/' + 
+           today.getFullYear();
+  }
+
+  function handleTripStateCheck() {
+    const stored = localStorage.getItem(TRIP_STORAGE_KEY);
+    const banner = document.getElementById('active-trip-banner');
+    const setupContainer = document.getElementById('trip-setup-container');
+    const loggingContainer = document.getElementById('trip-logging-container');
+
+    if (stored) {
+      activeTripData = JSON.parse(stored);
+      
+      if (activeTripData.date !== getTodayString() && !tripWarningAcknowledged) {
+        if (confirm(`Your active trip is from ${activeTripData.date} to ${activeTripData.park}. Do you want to continue it?\n\n(Click Cancel to end it and start a new one)`)) {
+          tripWarningAcknowledged = true;
+        } else {
+          endCurrentTrip();
+          return;
+        }
+      }
+      
+      banner.style.display = 'flex';
+      document.getElementById('trip-banner-park').innerText = activeTripData.park;
+      document.getElementById('trip-banner-date').innerText = activeTripData.date;
+      
+      setupContainer.style.display = 'none';
+      loggingContainer.style.display = 'block';
+      populateAttractionsDropdown();
+    } else {
+      banner.style.display = 'none';
+      setupContainer.style.display = 'block';
+      loggingContainer.style.display = 'none';
+      document.getElementById('trip-date').value = getTodayDateStringForInput();
+      document.getElementById('trip-park-new').style.display = 'none';
+      document.getElementById('trip-park-new').value = '';
+      populateParksDropdown();
+    }
+  }
+
+  function populateParksDropdown() {
+    const select = document.getElementById('trip-park-select');
+    const parks = [...new Set(rawData.map(r => r.park))].sort();
+    select.innerHTML = '<option value="" disabled selected>Select a park...</option>' + 
+                       parks.map(p => `<option value="${p}">${p}</option>`).join('') +
+                       '<option value="NEW_PARK">+ Add New Park</option>';
+  }
+
+  function checkNewParkInput(selectObj) {
+    const newParkInput = document.getElementById('trip-park-new');
+    if (selectObj.value === 'NEW_PARK') {
+      newParkInput.style.display = 'block';
+      newParkInput.required = true;
+    } else {
+      newParkInput.style.display = 'none';
+      newParkInput.required = false;
+    }
+  }
+
+  function handleStartTrip(e) {
+    e.preventDefault();
+    const dateInput = document.getElementById('trip-date').value;
+    const parkSelect = document.getElementById('trip-park-select').value;
+    const newParkInput = document.getElementById('trip-park-new').value.trim();
+
+    const sheetDate = formatInputDateToSheet(dateInput);
+    const parkName = parkSelect === 'NEW_PARK' ? newParkInput : parkSelect;
+
+    if (!parkName || !sheetDate) {
+      alert("Please provide valid date and park.");
+      return;
+    }
+
+    activeTripData = { date: sheetDate, park: parkName };
+    localStorage.setItem(TRIP_STORAGE_KEY, JSON.stringify(activeTripData));
+    tripWarningAcknowledged = false;
+    handleTripStateCheck();
+  }
+
+  function endCurrentTrip() {
+    if(confirm(`End trip to ${activeTripData.park}? You can start a new one any time.`)) {
+      localStorage.removeItem(TRIP_STORAGE_KEY);
+      activeTripData = null;
+      tripWarningAcknowledged = false;
+      handleTripStateCheck();
+    }
+  }
+
+  function populateAttractionsDropdown() {
+    if (!activeTripData) return;
+    const select = document.getElementById('log-attraction-select');
+    const attractions = [...new Set(rawData.filter(r => r.park === activeTripData.park).map(r => r.attraction))].sort();
+    
+    select.innerHTML = '<option value="" disabled selected>Select an attraction...</option>' + 
+                       attractions.map(a => `<option value="${a}">${a}</option>`).join('') +
+                       '<option value="NEW_ATTRACTION">+ Add New Attraction</option>';
+    
+    document.getElementById('log-attraction-new').style.display = 'none';
+    document.getElementById('log-attraction-new').required = false;
+    document.getElementById('log-count').value = 1;
+  }
+
+  function checkNewAttractionInput(selectObj) {
+    const newAttrInput = document.getElementById('log-attraction-new');
+    if (selectObj.value === 'NEW_ATTRACTION') {
+      newAttrInput.style.display = 'block';
+      newAttrInput.required = true;
+    } else {
+      newAttrInput.style.display = 'none';
+      newAttrInput.required = false;
+    }
+  }
+
+  function handleLogRide(e) {
+    e.preventDefault();
+    if (!activeTripData) return;
+
+    const attrSelect = document.getElementById('log-attraction-select').value;
+    const newAttrInput = document.getElementById('log-attraction-new').value.trim();
+    const attractionName = attrSelect === 'NEW_ATTRACTION' ? newAttrInput : attrSelect;
+    const rideCount = parseInt(document.getElementById('log-count').value, 10);
+
+    if (!attractionName || rideCount < 1) {
+      alert("Please provide valid attraction and count.");
+      return;
+    }
+
+    const payload = {
+      date: activeTripData.date,
+      park: activeTripData.park,
+      attraction: attractionName,
+      count: rideCount
+    };
+
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(response) {
+        rawData = response.data;
+        populateHomeScreen();
+        populateAttractionsDropdown(); 
+        showLoading(false);
+        showToast("Logged!");
+        
+        if (response.crossedMilestone) {
+          setTimeout(() => alert(`Congratulations! You just crossed ${response.crossedMilestone} lifetime rides on ${payload.attraction}!`), 500);
+        }
+      })
+      .withFailureHandler(function(err) {
+        alert("Error: " + err);
+        showLoading(false);
+      })
+      .addRide(payload);
+  }
+
+  // --- ATTRACTIONS TAB LOGIC ---
+  function populateAttractionsScreen() {
+    filterAttractions('');
+  }
+
+  function filterAttractions(searchTerm) {
+    const search = searchTerm.toLowerCase();
+    const tree = {};
+    
+    rawData.forEach(r => {
+      if (!tree[r.park]) tree[r.park] = {};
+      if (!tree[r.park][r.attraction]) tree[r.park][r.attraction] = { count: 0, lastDate: r.date, parsedDate: r.parsedDate || new Date(0) };
+      
+      tree[r.park][r.attraction].count += r.count;
+      if (r.parsedDate > tree[r.park][r.attraction].parsedDate) {
+        tree[r.park][r.attraction].parsedDate = r.parsedDate;
+        tree[r.park][r.attraction].lastDate = r.date;
+      }
+    });
+
+    let html = '';
+    Object.keys(tree).sort().forEach(park => {
+      const attrsHtml = Object.keys(tree[park])
+        .sort()
+        .filter(a => a.toLowerCase().includes(search) || park.toLowerCase().includes(search))
+        .map(a => `
+          <div class="list-item" onclick="viewAttractionDetails('${park.replace(/'/g, "\\'")}', '${a.replace(/'/g, "\\'")}')">
+            <div class="list-item-text">
+              <span class="list-item-title">${a}</span>
+              <span class="list-item-gray">Last: ${tree[park][a].lastDate}</span>
+            </div>
+            <div class="blue-badge">${tree[park][a].count}</div>
+          </div>
+        `).join('');
+
+      if (attrsHtml) {
+        html += `<h3 class="section-title" style="margin-bottom:8px;">${park}</h3>
+                 <div class="ride-card" style="padding: 0 16px; margin-bottom: 0;">${attrsHtml}</div>`;
+      }
+    });
+
+    document.getElementById('attractions-list-grouped').innerHTML = html || '<p class="gray-info">No attractions found.</p>';
+  }
+
+  function viewAttractionDetails(park, attr) {
+    const logs = rawData.filter(r => r.park === park && r.attraction === attr);
+    const total = logs.reduce((sum, r) => sum + r.count, 0);
+    
+    let html = `
+      <div class="ride-card" style="text-align:center;">
+        <div class="stat-number" style="font-size:48px;">${total}</div>
+        <div class="stat-label">TOTAL RIDES AT ${park.toUpperCase()}</div>
+      </div>
+      <h3 class="section-title">Log History</h3>
+      <div class="ride-card" style="padding: 0 16px;">
+        ${logs.map(l => `
+          <div class="list-item">
+            <span class="list-item-title">${l.date}</span>
+            <div class="blue-badge">${l.count}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    openDetailPanel(attr, html);
+  }
+
+  // --- PARKS TAB LOGIC ---
+  function populateParksScreen() {
+    const pStats = {};
+    rawData.forEach(r => {
+      if (!pStats[r.park]) pStats[r.park] = { total: 0, attrs: new Set() };
+      pStats[r.park].total += r.count;
+      pStats[r.park].attrs.add(r.attraction);
+    });
+
+    const html = Object.keys(pStats).sort().map(p => `
+      <div class="list-item" onclick="viewParkDetails('${p.replace(/'/g, "\\'")}')">
+        <div class="list-item-text">
+          <span class="list-item-title">${p}</span>
+          <span class="list-item-gray">${pStats[p].attrs.size} Unique Attractions</span>
+        </div>
+        <div class="blue-badge">${pStats[p].total}</div>
+      </div>
+    `).join('');
+
+    document.getElementById('parks-list-grouped').innerHTML = `<div class="ride-card" style="padding: 0 16px;">${html}</div>`;
+  }
+
+  function viewParkDetails(park) {
+    const logs = rawData.filter(r => r.park === park);
+    const aStats = {};
+    logs.forEach(l => {
+      aStats[l.attraction] = (aStats[l.attraction] || 0) + l.count;
+    });
+    const total = logs.reduce((sum, r) => sum + r.count, 0);
+
+    let html = `
+      <div class="ride-card" style="text-align:center;">
+        <div class="stat-number" style="font-size:48px;">${total}</div>
+        <div class="stat-label">TOTAL RIDES</div>
+      </div>
+      <h3 class="section-title">Attractions</h3>
+      <div class="ride-card" style="padding: 0 16px;">
+        ${Object.entries(aStats).sort((a,b) => b[1] - a[1]).map(([attr, count]) => `
+          <div class="list-item" onclick="viewAttractionDetails('${park.replace(/'/g, "\\'")}', '${attr.replace(/'/g, "\\'")}')">
+            <span class="list-item-title">${attr}</span>
+            <div class="blue-badge">${count}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    openDetailPanel(park, html);
+  }
+
+  // --- STATS TAB LOGIC ---
+  function populateStatsScreen() {
+    if (rawData.length === 0) {
+      document.getElementById('stats-content-area').innerHTML = '<p class="gray-info">No data available yet.</p>';
+      return;
+    }
+
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    
+    let thisYearCount = 0;
+    let thisMonthCount = 0;
+    let earliestDate = rawData[0].parsedDate;
+    let earliestStr = rawData[0].date;
+    
+    const attrCounts = {};
+    const yearCounts = {};
+
+    rawData.forEach(r => {
+      if(!r.parsedDate) return;
+      const y = r.parsedDate.getFullYear();
+      const m = r.parsedDate.getMonth();
+      
+      if (y === currentYear) thisYearCount += r.count;
+      if (y === currentYear && m === currentMonth) thisMonthCount += r.count;
+
+      if (r.parsedDate < earliestDate) {
+        earliestDate = r.parsedDate;
+        earliestStr = r.date;
+      }
+
+      const aKey = r.park + '|' + r.attraction;
+      attrCounts[aKey] = (attrCounts[aKey] || 0) + r.count;
+      yearCounts[y] = (yearCounts[y] || 0) + r.count;
+    });
+
+    let topAttraction = { name: '', count: 0 };
+    const thresholds = [10, 25, 50, 100, 250, 500, 1000];
+    const milestones = [];
+
+    Object.entries(attrCounts).forEach(([key, count]) => {
+      if (count > topAttraction.count) {
+        topAttraction = { name: key.split('|')[1] + ' (' + key.split('|')[0] + ')', count: count };
+      }
+      
+      let highestMilestone = 0;
+      thresholds.forEach(t => { if (count >= t) highestMilestone = t; });
+      if (highestMilestone > 0) {
+        milestones.push({ name: key.split('|')[1], park: key.split('|')[0], count, milestone: highestMilestone });
+      }
+    });
+    milestones.sort((a, b) => b.count - a.count);
+
+    let html = `
+      <div style="display:flex; gap:12px; margin-bottom:20px;">
+        <div class="stat-box" style="flex:1;">
+          <div class="stat-number" style="font-size:32px;">${thisMonthCount}</div>
+          <div class="stat-label">THIS MONTH</div>
+        </div>
+        <div class="stat-box" style="flex:1;">
+          <div class="stat-number" style="font-size:32px;">${thisYearCount}</div>
+          <div class="stat-label">THIS YEAR</div>
+        </div>
+      </div>
+
+      <div class="ride-card">
+        <div style="margin-bottom:16px;">
+          <div class="stat-label" style="color:var(--text-secondary); margin-bottom:4px;">ALL-TIME MOST RIDDEN</div>
+          <div style="font-size:18px; font-weight:bold;">${topAttraction.name}</div>
+          <div style="color:var(--accent-blue); font-weight:bold;">${topAttraction.count} rides</div>
+        </div>
+        <div style="border-top:1px solid var(--card-border); padding-top:16px;">
+          <div class="stat-label" style="color:var(--text-secondary); margin-bottom:4px;">FIRST RIDE LOGGED</div>
+          <div style="font-size:18px; font-weight:bold;">${earliestStr}</div>
+        </div>
+      </div>
+
+      <h3 class="section-title">Rides Per Year</h3>
+      <div class="ride-card" style="padding: 0 16px;">
+        ${Object.keys(yearCounts).sort((a,b) => b - a).map(y => `
+          <div class="list-item">
+            <span class="list-item-title">${y}</span>
+            <span class="blue-badge">${yearCounts[y]}</span>
+          </div>
+        `).join('')}
+      </div>
+
+      <h3 class="section-title">Milestones Passed</h3>
