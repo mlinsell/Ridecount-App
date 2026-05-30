@@ -1,0 +1,167 @@
+<style>
+  :root {
+    --bg-color: #ffffff;
+    --text-main: #000000;
+    --text-secondary: #666666;
+    --accent-blue: #3068b5; /* Adjusted to better match the exact blue in the image */
+    --blue-badge-text: #ffffff;
+    --card-bg: #f9f9fc;
+    --card-border: #e8e8ed;
+    --card-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    --nav-bg: #f8f8f8;
+    --confirm-btn-bg: #3068b5;
+    --confirm-btn-text: #ffffff;
+    --toast-bg: #333333;
+    --toast-text: #ffffff;
+    --detail-overlay-bg: #ffffff;
+    --detail-overlay-header: #3068b5;
+    --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: var(--font-main);
+    margin: 0; padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    overflow: hidden;
+  }
+
+  #app-container { display: flex; flex-direction: column; height: 100vh; width: 100%; }
+
+  #top-title-container { padding: 16px 20px 8px; }
+  
+  #main-title { font-size: 26px; font-weight: 800; color: var(--text-main); margin: 0 0 16px 0; }
+  
+  .section-title { font-size: 14px; font-weight: bold; color: var(--text-main); margin: 24px 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  #main-content { flex: 1; overflow-y: auto; padding-bottom: 90px; box-sizing: border-box; }
+
+  .tab-screen { display: none; padding: 0 20px; animation: fadeIn 0.15s ease-in-out; }
+  .tab-screen.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .ride-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    margin-bottom: 16px;
+  }
+  .ride-card h3 { font-size: 18px; margin: 0 0 4px 0; font-weight: bold; color: var(--text-main); }
+  .gray-info { font-size: 14px; color: var(--text-secondary); margin: 0 0 4px 0; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+  /* Stats Cards */
+  #stats-cards-container { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+  
+  .stat-box {
+    flex: 1;
+    text-align: center;
+    border: 1px solid var(--card-border);
+    background-color: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px 0;
+    box-shadow: var(--card-shadow);
+  }
+  .stat-number { font-size: 32px; font-weight: 800; color: var(--accent-blue); margin-bottom: 4px; }
+  .stat-label { font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-main); letter-spacing: 0.5px; }
+
+  /* List Items */
+  .list-item { border-bottom: 1px solid var(--card-border); padding: 12px 0; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .list-item:last-child { border-bottom: none; }
+  .list-item-main-info { display: flex; align-items: flex-start; gap: 12px; }
+  .list-item-rank { font-size: 16px; color: var(--text-main); font-weight: bold; margin-top: 1px; }
+  .list-item-text { display: flex; flex-direction: column; }
+  .list-item-title { font-size: 16px; font-weight: 600; color: var(--text-main); margin-bottom: 4px; }
+  .list-item-gray { font-size: 13px; color: var(--text-secondary); }
+  
+  /* Badges */
+  .blue-badge { background-color: var(--accent-blue); color: var(--blue-badge-text); padding: 6px 14px; border-radius: 16px; font-weight: bold; font-size: 14px; }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 14px; font-weight: bold; color: var(--text-main); margin-bottom: 8px; display: block; }
+  
+  input[type=text], input[type=date], input[type=number], select {
+    width: 100%;
+    padding: 14px;
+    box-sizing: border-box;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    font-size: 16px;
+    color: var(--text-main);
+    background-color: #ffffff;
+  }
+  
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="%23666" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+  
+  button.confirm-btn {
+    width: 100%; padding: 16px; background-color: var(--confirm-btn-bg); color: var(--confirm-btn-text);
+    border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+  }
+
+  /* Trip Banner */
+  #active-trip-banner {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 4px solid var(--accent-blue);
+    padding: 16px;
+    border-radius: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    box-shadow: var(--card-shadow);
+  }
+  #trip-banner-park { font-size: 18px; font-weight: bold; color: var(--text-main); display: block; margin-bottom: 4px; }
+  #trip-banner-date { font-size: 13px; color: var(--text-secondary); }
+  #end-trip-link { font-size: 13px; color: #ff3b30; font-weight: bold; cursor: pointer; padding: 8px; }
+
+  /* Navigation Bar */
+  #bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 70px;
+    background-color: var(--nav-bg); border-top: 1px solid var(--card-border);
+    display: flex; justify-content: space-around; align-items: center;
+    padding-bottom: env(safe-area-inset-bottom, 0); z-index: 100;
+  }
+  .nav-tab {
+    flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    color: #a0a0a0; cursor: pointer; user-select: none;
+  }
+  .nav-tab.active { color: var(--accent-blue); }
+  .nav-icon { width: 24px; height: 24px; margin-bottom: 4px; transition: fill 0.2s; }
+  .nav-icon path { fill: currentColor; }
+  .nav-label { font-size: 10px; font-weight: 700; }
+
+  /* Detail Panel */
+  .detail-panel {
+    position: fixed; top: 0; left: 100%; width: 100%; height: 100%;
+    background-color: var(--bg-color); z-index: 200; transition: left 0.3s ease-out; overflow-y: auto;
+  }
+  .detail-panel.active { left: 0; }
+  .detail-header {
+    background-color: var(--bg-color); padding: 16px 20px; display: flex; align-items: center;
+    color: var(--text-main); height: 60px; box-sizing: border-box; border-bottom: 1px solid var(--card-border);
+  }
+  .back-btn { cursor: pointer; margin-right: 16px; display: flex; align-items: center; }
+  #detail-panel-title { font-size: 20px; font-weight: bold; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+  .detail-content { padding: 20px; }
+
+  /* Loading & Toasts */
+  #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(255,255,255,0.8); display: none; justify-content: center; align-items: center; z-index: 1000; }
+  .spinner { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--card-border); border-top-color: var(--accent-blue); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); text-align: center; display: none; z-index: 101; width: 100%; pointer-events: none;}
+  .toast { display: inline-block; background-color: var(--toast-bg); color: var(--toast-text); padding: 12px 24px; border-radius: 24px; font-size: 14px; font-weight: bold; box-shadow: var(--card-shadow); }
+
+  #attractions-search-container { padding: 0 0 16px 0; }
+</style>
